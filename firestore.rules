@@ -1,0 +1,59 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // Helper functions
+    function isTeacher() {
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "teacher";
+    }
+    
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // users: Allow users to read/write their own profile
+    match /users/{uid} {
+      allow read, update, delete: if isOwner(uid);
+      allow create: if request.auth != null; // Any authenticated user can create their user profile
+    }
+
+    // attendees: 
+    // - Teachers can manage all attendees
+    // - Students can create their own attendee record on signup
+    match /attendees/{attendeeId} {
+      allow read, write: if isTeacher();
+      allow create: if request.auth != null; // Allow any authenticated user to create an attendee profile
+    }
+    
+    // deleted_attendees: only teachers
+    match /deleted_attendees/{attendeeId} {
+       allow read, write: if isTeacher();
+    }
+    
+    // attendance: only teachers can manage
+    match /attendance/{date} {
+        allow read, write: if isTeacher();
+    }
+    
+    // assignments:
+    // - Any authenticated user can read
+    // - Only teachers can create, update, delete
+    match /assignments/{assignmentId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isTeacher();
+    }
+    
+    // submissions:
+    // - teachers can read all
+    // - students can read their own
+    // - students can create their own
+    match /submissions/{submissionId} {
+        allow read: if isTeacher() || (request.auth != null && getAfter(/databases/$(database)/documents/submissions/$(submissionId)).data.studentId == request.auth.uid);
+        allow create: if request.auth != null; // Students create submissions
+        allow update: if isTeacher(); // Only teachers can update (grade/feedback)
+    }
+  }
+}
+    
